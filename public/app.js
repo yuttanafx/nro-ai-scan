@@ -82,12 +82,32 @@
   let loud=0;
 
   const MOBILE=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform));
+  const HOWTO=MOBILE
+    ? (/iPhone|iPad|iPod|Mac/.test(navigator.userAgent)
+        ? 'iPhone: แตะไอคอน “aA” ข้างช่องที่อยู่เว็บ → การตั้งค่าเว็บไซต์ → ไมโครโฟน → อนุญาต แล้วโหลดหน้าใหม่'
+        : 'Android: แตะไอคอนด้านซ้ายของช่องที่อยู่เว็บ → สิทธิ์ → ไมโครโฟน → อนุญาต แล้วโหลดหน้าใหม่')
+    : 'แตะไอคอนด้านซ้ายของช่องที่อยู่เว็บ → ไมโครโฟน → อนุญาต แล้วโหลดหน้าใหม่';
+  const DENIED='ไมค์ถูกบล็อกไว้ เบราว์เซอร์จะไม่ถามซ้ำ ต้องเปิดเอง: '+HOWTO;
   async function startMic(){
     try{
       stopAll();
-      startRec(); // ต้องเรียกทันทีในจังหวะแตะ ไม่งั้นมือถือบล็อก
+      if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        statusEl.textContent='เบราว์เซอร์นี้ใช้ไมค์ไม่ได้ ต้องเปิดผ่าน HTTPS และไม่ใช่เบราว์เซอร์ในแอป (LINE/Facebook)'; return;
+      }
+      // ขอสิทธิ์ไมค์ก่อน เพื่อให้ป๊อปอัพ “อนุญาต” เด้งขึ้นมา
+      let perm='unknown';
+      try{ perm=(await navigator.permissions.query({name:'microphone'})).state }catch(e){}
+      if(perm==='denied'){ statusEl.textContent=DENIED; return }
+      if(perm!=='granted') statusEl.textContent='กำลังขอสิทธิ์ไมค์… กด “อนุญาต” ในป๊อปอัพที่เด้งขึ้น';
+
       if(MOBILE){
-        // มือถือใช้ไมค์ได้ทีละงาน: ให้ระบบถอดเสียงใช้ไมค์ ลูกบอลขยับแบบจำลองแทน
+        // มือถือใช้ไมค์ได้ทีละงาน: ขอสิทธิ์แล้วคืนไมค์ ให้ระบบถอดเสียงใช้ต่อ ลูกบอลขยับแบบจำลองแทน
+        if(perm!=='granted'){
+          const tmp=await navigator.mediaDevices.getUserMedia({audio:true});
+          tmp.getTracks().forEach(t=>t.stop());
+          await new Promise(r=>setTimeout(r,300));
+        }
+        startRec();
         mode='demo'; micBtn.classList.add('on'); micBtn.textContent='ปิดไมค์';
         statusEl.textContent='AI กำลังฟังคุณ… (ลูกบอลขยับตามจังหวะ ไม่ตามเสียงจริงบนมือถือ)';
         return;
@@ -97,11 +117,15 @@
       const src=ac.createMediaStreamSource(stream);
       analyser=ac.createAnalyser(); analyser.fftSize=512; analyser.smoothingTimeConstant=.78;
       src.connect(analyser);
+      startRec();
       mode='mic'; micBtn.classList.add('on'); micBtn.textContent='ปิดไมค์';
       statusEl.textContent='AI กำลังฟังคุณ…';
     }catch(e){
-      mode='idle'; try{stopRec()}catch(_){}
-      statusEl.textContent='เปิดไมค์ไม่ได้ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์';
+      stopAll();
+      statusEl.textContent=(e&&(e.name==='NotAllowedError'||e.name==='SecurityError'))
+        ? DENIED
+        : (e&&e.name==='NotFoundError') ? 'ไม่พบไมค์ในเครื่องนี้'
+        : 'เปิดไมค์ไม่ได้ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์';
     }
   }
   function stopAll(){
@@ -353,7 +377,7 @@
   let rec=null, want=false, finalText='';
   function applyLang(){ if(rec) rec.lang=cfg.lang }
   const SR_ERR={
-    'not-allowed':'ไม่ได้รับอนุญาตให้ใช้ไมค์ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์ (ถ้าเปิดจากแอป LINE/Facebook ให้เปิดลิงก์ใน Chrome หรือ Safari แทน)',
+    'not-allowed':'ไม่ได้รับอนุญาตให้ใช้ไมค์ '+HOWTO+' (ถ้าเปิดจากแอป LINE/Facebook ให้เปิดลิงก์ใน Chrome หรือ Safari แทน)',
     'service-not-allowed':'เบราว์เซอร์นี้ไม่อนุญาตให้ถอดเสียง ลองเปิดใน Chrome (Android) หรือ Safari (iPhone) และเปิดการสั่งงานด้วยเสียง/Dictation ในตั้งค่าเครื่อง',
     'audio-capture':'ไม่พบไมค์ หรือแอปอื่นกำลังใช้ไมค์อยู่ ปิดแอปที่ใช้ไมค์แล้วลองใหม่',
     'network':'ถอดเสียงต้องต่ออินเทอร์เน็ตตลอดเวลา ตรวจสัญญาณแล้วลองใหม่',
