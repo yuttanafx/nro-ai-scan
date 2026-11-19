@@ -1,0 +1,68 @@
+
+:root{
+  color-scheme: dark;
+  --bg:#05060d; --ink:#e9ecff; --muted:#8a90b8; --line:#232748;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:radial-gradient(ellipse at 50% 40%,#0d1030 0%,var(--bg) 70%);
+  color:var(--ink); font-family:"Noto Sans Thai",system-ui,sans-serif;
+  display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1.2rem; overflow:hidden;
+}
+#stage{width:min(88vw,62vh,560px); aspect-ratio:1}
+#scene{position:fixed;inset:0;z-index:0;pointer-events:none}
+#scene svg{width:100%;height:100%;display:block}
+#app>*:not(#scene){position:relative;z-index:1}
+#status{text-shadow:0 1px 8px #000}
+.tw{animation:tw 4s ease-in-out infinite}
+@keyframes tw{50%{opacity:.25}}
+.ship{animation:fly 14s linear infinite}
+@keyframes fly{from{transform:translateX(0)}to{transform:translateX(1800px)}}
+@media (prefers-reduced-motion:reduce){.tw,.ship{animation:none}}
+canvas{width:100%;height:100%;display:block}
+#status{font-weight:300;font-size:1.05rem;letter-spacing:.04em;color:var(--muted);min-height:1.6em;text-align:center}
+.row{display:flex;gap:.7rem;flex-wrap:wrap;justify-content:center}
+button{
+  font:inherit;font-weight:500;color:var(--ink);background:transparent;
+  border:1px solid var(--line);border-radius:999px;padding:.7rem 1.4rem;cursor:pointer;
+  transition:border-color .2s, background .2s;
+}
+button:hover{border-color:#7a82d6;background:#12163a}
+button:focus-visible{outline:2px solid #9fb4ff;outline-offset:3px}
+button.on{border-color:#7affc9;color:#7affc9}
+
+/* --- admin + export --- */
+body{overflow-y:auto;padding:4.2rem 1rem 1.5rem}
+#stage{width:min(80vw,42vh,480px)}
+#app>#top{position:fixed;top:calc(env(safe-area-inset-top,0px) + .8rem);right:.8rem;z-index:30;display:flex;gap:.5rem}
+#top button{padding:.45rem 1rem;font-size:.9rem;background:#0a0d26cc}
+.card{width:min(94vw,520px);border:1px solid var(--line);border-radius:18px;background:#0a0d26d9;padding:1rem 1.1rem;display:grid;gap:.7rem;backdrop-filter:blur(8px)}
+textarea,input,select{font:inherit;color:var(--ink);background:#05071a;border:1px solid var(--line);border-radius:10px;padding:.55rem .7rem;width:100%}
+textarea{min-height:5.5rem;resize:vertical;line-height:1.5}
+textarea:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #9fb4ff;outline-offset:2px}
+label{font-size:.85rem;color:var(--muted);display:grid;gap:.3rem}
+.r2{display:grid;grid-template-columns:1fr auto;gap:.6rem;align-items:end}
+button.go{background:linear-gradient(90deg,#3b8cff,#b04bff);border-color:transparent}
+button.go:hover{filter:brightness(1.15);background:linear-gradient(90deg,#3b8cff,#b04bff)}
+#exStatus,.note{font-size:.82rem;color:var(--muted);min-height:1.2em}
+#app>#login,#app>#settings{position:fixed;inset:0;z-index:20;display:none;overflow-y:auto;background:#04050fe6;backdrop-filter:blur(10px);padding:4.5rem 1rem 2rem;align-items:flex-start;justify-content:center}
+#app>#login.show,#app>#settings.show{display:flex}
+h2{margin:0;font-weight:500;font-size:1.25rem}
+.frow{display:grid;grid-template-columns:.8fr 1.6fr auto;gap:.4rem;align-items:center}
+.frow button{padding:.4rem .7rem}
+.err{color:#ff8fa8}
+#export[hidden]{display:none}
+#app>#logo{position:fixed;top:calc(env(safe-area-inset-top,0px) + .7rem);left:.8rem;z-index:30;width:clamp(58px,9vw,88px);height:auto;aspect-ratio:1;border-radius:50%;box-shadow:0 0 0 2px #ffffff40,0 0 22px #7ff3ff59}
+body.logo #stage{width:min(86vw,48vh,540px)}
+body.logo #app>#logo{display:none}
+#app>#brand{position:fixed;z-index:30;top:calc(env(safe-area-inset-top,0px) + .7rem);left:.9rem;min-height:2.4rem;display:flex;flex-direction:column;justify-content:center;line-height:1.2;text-shadow:0 1px 10px #000;pointer-events:none}
+body:not(.logo) #app>#brand{left:calc(clamp(58px,9vw,88px) + 1.5rem);min-height:clamp(58px,9vw,88px)}
+#brand b{font-weight:500;font-size:1.35rem;letter-spacing:.04em}
+#brand span{font-weight:300;font-size:.8rem;color:var(--muted)}
+@media (max-width:560px){#top{flex-wrap:wrap;justify-content:flex-end;max-width:58vw}#top button{padding:.35rem .7rem;font-size:.78rem}#brand b{font-size:1.15rem}#brand span{font-size:.66rem}}
+
+#app{display:contents}

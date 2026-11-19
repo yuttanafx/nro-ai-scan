@@ -1,0 +1,86 @@
+<div id="scene" aria-hidden="true">
+<svg viewBox="0 0 1600 900" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
+<defs>
+<linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#02030c"/><stop offset=".5" stop-color="#0a0f45"/><stop offset=".82" stop-color="#4a1a7e"/><stop offset="1" stop-color="#ff4fa3"/></linearGradient>
+<radialGradient id="hz" cx=".5" cy="1" r=".55"><stop offset="0" stop-color="#ff7ad0" stop-opacity=".8"/><stop offset=".5" stop-color="#7a3cff" stop-opacity=".25"/><stop offset="1" stop-color="#7a3cff" stop-opacity="0"/></radialGradient>
+<radialGradient id="pl" cx=".35" cy=".3" r=".85"><stop offset="0" stop-color="#9cf0ff"/><stop offset=".45" stop-color="#3f46d6"/><stop offset="1" stop-color="#0d0640"/></radialGradient>
+<linearGradient id="gd" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1b0a4d"/><stop offset=".25" stop-color="#0a0630"/><stop offset="1" stop-color="#02030c"/></linearGradient>
+<pattern id="win" width="12" height="16" patternUnits="userSpaceOnUse"><rect x="3" y="4" width="3" height="5" fill="#7ff3ff" opacity=".75"/><rect x="8" y="10" width="2" height="3" fill="#ff7ad0" opacity=".6"/></pattern>
+<linearGradient id="beam" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#7ff3ff" stop-opacity=".7"/><stop offset="1" stop-color="#7ff3ff" stop-opacity="0"/></linearGradient>
+<filter id="soft"><feGaussianBlur stdDeviation="3 1.2"/></filter>
+</defs>
+<rect width="1600" height="660" fill="url(#sky)"/>
+<rect width="1600" height="660" fill="url(#hz)"/>
+<g id="stars" fill="#fff"></g>
+<g transform="rotate(-16 250 190)"><circle cx="250" cy="190" r="105" fill="url(#pl)"/><ellipse cx="250" cy="190" rx="215" ry="34" fill="none" stroke="#bff6ff" stroke-opacity=".55" stroke-width="3"/><ellipse cx="250" cy="190" rx="245" ry="42" fill="none" stroke="#ff7ad0" stroke-opacity=".3" stroke-width="2"/></g>
+<circle cx="1330" cy="140" r="26" fill="#e9d6ff" opacity=".9"/><circle cx="1340" cy="134" r="22" fill="#2a1a70" opacity=".35"/>
+<g id="fl"><path class="ship" d="M-60 120 L0 120" stroke="#7ff3ff" stroke-width="3" stroke-linecap="round" style="animation-delay:0s"/><path class="ship" d="M-60 210 L-10 210" stroke="#ff7ad0" stroke-width="2.5" stroke-linecap="round" style="animation-delay:-5s;animation-duration:16s"/><path class="ship" d="M-60 300 L10 300" stroke="#fff" stroke-width="2" stroke-linecap="round" style="animation-delay:-9s;animation-duration:20s"/></g>
+<g id="city"></g>
+<rect y="660" width="1600" height="240" fill="url(#gd)"/>
+<g id="refl" opacity=".28" filter="url(#soft)"></g>
+<g id="grid" fill="none" stroke-width="1.2"></g>
+<rect y="656" width="1600" height="6" fill="#7ff3ff" opacity=".7"/>
+<rect y="662" width="1600" height="26" fill="#7ff3ff" opacity=".06"/>
+<rect width="1600" height="900" fill="#02030c" opacity=".2"/>
+</svg>
+</div>
+<div id="stage"><canvas id="c" aria-label="จุดสีรุ้งเรืองแสงเป็นวงกลม ขยับตามเสียง" role="img"></canvas></div>
+<div id="status">แตะ “เปิดไมค์” เพื่อให้ AI เริ่มฟัง</div>
+<div class="row">
+  <button id="mic">เปิดไมค์</button>
+  <button id="demo">ทดลองเสียงจำลอง</button>
+</div>
+
+<img id="logo" src="/logo.jpg" alt="โลโก้เครือข่ายร่วมมือเพื่อประชาชน ทวิภาคีเพื่อความเป็นธรรม" width="88" height="88">
+<div id="brand"><b>NRO.</b><span>(National Rescue Organization)</span></div>
+<div id="top"><button id="bMode">ใช้ลูกบอล</button><button id="bTx" aria-controls="export" aria-expanded="true">ซ่อนข้อความ</button><button id="bSet">ตั้งค่า</button><button id="bOut" hidden>ออกจากระบบ</button></div>
+
+<div class="card" id="export">
+  <label>คำพูดที่ฟังได้ (แก้ไขหรือวางข้อความเองได้)
+    <textarea id="tr" placeholder="กดเปิดไมค์ ข้อความจะขึ้นที่นี่…"></textarea></label>
+  <div class="r2">
+    <label>รูปแบบเอกสารสรุป
+      <select id="fmt">
+        <option value="md">Markdown (.md)</option>
+        <option value="txt">ข้อความ (.txt)</option>
+        <option value="html">หน้าเว็บ (.html)</option>
+        <option value="json">JSON (.json)</option>
+        <option value="csv">ตาราง CSV (.csv)</option>
+      </select></label>
+    <button class="go" id="bExport">สรุปและดาวน์โหลด</button>
+  </div>
+  <div id="exStatus" role="status"></div>
+</div>
+
+<section id="login" aria-label="เข้าสู่ระบบ"><div class="card">
+  <h2 id="lTitle">เข้าสู่ระบบผู้ดูแล</h2>
+  <label>ชื่อผู้ใช้<input id="lu" autocomplete="username"></label>
+  <label>รหัสผ่าน<input id="lp" type="password" autocomplete="current-password"></label>
+  <div class="err" id="lErr" role="alert"></div>
+  <button class="go" id="lGo">เข้าสู่ระบบ</button>
+  <div class="note">ล็อกอินตรวจที่เซิร์ฟเวอร์ ตั้งชื่อผู้ใช้และรหัสผ่านไว้ใน Environment Variables</div>
+  <button id="lBack">กลับหน้าลูกบอล</button>
+</div></section>
+
+<section id="settings" aria-label="ตั้งค่า"><div class="card">
+  <h2>ตั้งค่าการวิเคราะห์</h2>
+  <label>Webhook URL (ปลายทางที่รับผลสรุป)<input id="sWh" placeholder="https://your-app.vercel.app/api/analyze" inputmode="url"></label>
+  <label>ส่วนหัว Authorization (ไม่บังคับ)<input id="sAuth" placeholder="Bearer ..."></label>
+  <label>ภาษาที่ฟัง
+    <select id="sLang"><option value="th-TH">ไทย</option><option value="en-US">English</option><option value="ja-JP">日本語</option><option value="zh-CN">中文</option></select></label>
+  <label>ลิงก์ GitHub ของฐานข้อมูลหรือสคีมา (repo โฟลเดอร์ หรือไฟล์)
+    <input id="sGh" placeholder="https://github.com/ชื่อ/repo/blob/main/schema.sql" inputmode="url"></label>
+  <button id="sGhGo">ดึงจากลิงก์</button>
+  <label>เนื้อหาฐานข้อมูลที่ AI ใช้เป็นกรอบ (ดึงมาแล้วแก้ไขได้ หรือวางเองก็ได้)
+    <textarea id="sRef" placeholder="เช่น CREATE TABLE customers (id, name, phone, ...)"></textarea></label>
+  <button id="sGen">ให้ AI ร่างฟิลด์จากฐานข้อมูลนี้</button>
+  <div class="note" id="sGhMsg" role="status"></div>
+  <label>กรอบข้อมูลที่ให้ AI วิเคราะห์ (ชื่อฟิลด์ และสิ่งที่ต้องการให้ดึงออกมา)</label>
+  <div id="sFields" style="display:grid;gap:.5rem"></div>
+  <button id="sAdd">เพิ่มฟิลด์</button>
+  <div class="r2" style="grid-template-columns:1fr 1fr">
+    <button class="go" id="sSave">บันทึก</button><button id="sTest">ทดสอบ Webhook</button>
+  </div>
+  <div class="note" id="sMsg" role="status"></div>
+  <button id="sBack">กลับหน้าลูกบอล</button>
+</div></section>
