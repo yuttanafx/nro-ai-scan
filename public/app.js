@@ -2,7 +2,7 @@
 (function(){
   const cv=document.getElementById('c'), ctx=cv.getContext('2d');
   const statusEl=document.getElementById('status');
-  const micBtn=document.getElementById('mic'), demoBtn=document.getElementById('demo');
+  const micBtn=document.getElementById('mic');
   let size=0, dpr=1;
   function resize(){
     dpr=Math.min(window.devicePixelRatio||1,2);
@@ -81,9 +81,17 @@
   const BINS=96, level=new Float32Array(BINS), freq=new Uint8Array(256);
   let loud=0;
 
+  const MOBILE=/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform));
   async function startMic(){
     try{
       stopAll();
+      startRec(); // ต้องเรียกทันทีในจังหวะแตะ ไม่งั้นมือถือบล็อก
+      if(MOBILE){
+        // มือถือใช้ไมค์ได้ทีละงาน: ให้ระบบถอดเสียงใช้ไมค์ ลูกบอลขยับแบบจำลองแทน
+        mode='demo'; micBtn.classList.add('on'); micBtn.textContent='ปิดไมค์';
+        statusEl.textContent='AI กำลังฟังคุณ… (ลูกบอลขยับตามจังหวะ ไม่ตามเสียงจริงบนมือถือ)';
+        return;
+      }
       ac=new (window.AudioContext||window.webkitAudioContext)();
       stream=await navigator.mediaDevices.getUserMedia({audio:true});
       const src=ac.createMediaStreamSource(stream);
@@ -92,24 +100,20 @@
       mode='mic'; micBtn.classList.add('on'); micBtn.textContent='ปิดไมค์';
       statusEl.textContent='AI กำลังฟังคุณ…';
     }catch(e){
-      mode='idle';
-      statusEl.textContent='เปิดไมค์ไม่ได้ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์ หรือลองเสียงจำลองแทน';
+      mode='idle'; try{stopRec()}catch(_){}
+      statusEl.textContent='เปิดไมค์ไม่ได้ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์';
     }
   }
   function stopAll(){
     if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
     if(ac){ac.close();ac=null}
     analyser=null; mode='idle';
-    micBtn.classList.remove('on'); demoBtn.classList.remove('on');
-    micBtn.textContent='เปิดไมค์'; demoBtn.textContent='ทดลองเสียงจำลอง';
+    try{stopRec()}catch(e){}
+    micBtn.classList.remove('on');
+    micBtn.textContent='เปิดไมค์';
     statusEl.textContent='แตะ “เปิดไมค์” เพื่อให้ AI เริ่มฟัง';
   }
-  micBtn.onclick=()=> mode==='mic'?stopAll():startMic();
-  demoBtn.onclick=()=>{
-    if(mode==='demo'){stopAll();return}
-    stopAll(); mode='demo'; demoBtn.classList.add('on'); demoBtn.textContent='หยุดเสียงจำลอง';
-    statusEl.textContent='เสียงจำลอง — ลองเปิดไมค์เพื่อใช้เสียงจริง';
-  };
+  micBtn.onclick=()=> micBtn.classList.contains('on')?stopAll():startMic();
 
   function readAudio(t){
     if(mode==='mic'&&analyser){ analyser.getByteFrequencyData(freq); }
@@ -348,17 +352,41 @@
   const SR=window.SpeechRecognition||window.webkitSpeechRecognition, ta=$('tr');
   let rec=null, want=false, finalText='';
   function applyLang(){ if(rec) rec.lang=cfg.lang }
+  const SR_ERR={
+    'not-allowed':'ไม่ได้รับอนุญาตให้ใช้ไมค์ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์ (ถ้าเปิดจากแอป LINE/Facebook ให้เปิดลิงก์ใน Chrome หรือ Safari แทน)',
+    'service-not-allowed':'เบราว์เซอร์นี้ไม่อนุญาตให้ถอดเสียง ลองเปิดใน Chrome (Android) หรือ Safari (iPhone) และเปิดการสั่งงานด้วยเสียง/Dictation ในตั้งค่าเครื่อง',
+    'audio-capture':'ไม่พบไมค์ หรือแอปอื่นกำลังใช้ไมค์อยู่ ปิดแอปที่ใช้ไมค์แล้วลองใหม่',
+    'network':'ถอดเสียงต้องต่ออินเทอร์เน็ตตลอดเวลา ตรวจสัญญาณแล้วลองใหม่',
+    'language-not-supported':'เบราว์เซอร์ไม่รองรับภาษานี้ ลองเปลี่ยนภาษาในหน้าตั้งค่า'
+  };
+  let fails=0;
   function startRec(){
-    if(!SR){ta.placeholder='เบราว์เซอร์นี้ถอดเสียงอัตโนมัติไม่ได้ พิมพ์หรือวางข้อความเองได้';return}
-    want=true; finalText=ta.value?ta.value.trim()+' ':'';
-    rec=new SR(); rec.lang=cfg.lang; rec.continuous=true; rec.interimResults=true;
-    rec.onresult=e=>{let it='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript; if(e.results[i].isFinal) finalText+=t+' '; else it+=t} ta.value=finalText+it; ta.scrollTop=ta.scrollHeight};
-    rec.onend=()=>{if(want){try{rec.start()}catch(e){}}};
-    rec.onerror=()=>{};
+    if(!SR){
+      ta.placeholder='เบราว์เซอร์นี้ถอดเสียงอัตโนมัติไม่ได้ พิมพ์หรือวางข้อความเองได้';
+      statusEl.textContent='เบราว์เซอร์นี้ถอดเสียงไม่ได้ (ลองใช้ Chrome บน Android หรือ Safari บน iPhone ไม่ใช่เบราว์เซอร์ในแอป LINE/Facebook) พิมพ์หรือวางข้อความเองได้';
+      return;
+    }
+    want=true; fails=0; finalText=ta.value?ta.value.trim()+' ':'';
+    rec=new SR(); rec.lang=cfg.lang; rec.interimResults=true;
+    rec.continuous=!MOBILE; // มือถือ (โดยเฉพาะ Android) โหมดต่อเนื่องทำข้อความซ้ำ/ตัดเสียง จึงใช้ทีละประโยคแล้วเริ่มใหม่
+    rec.onresult=e=>{
+      fails=0; let it='';
+      for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript; if(e.results[i].isFinal) finalText+=t+' '; else it+=t}
+      ta.value=finalText+it; ta.scrollTop=ta.scrollHeight;
+    };
+    rec.onend=()=>{
+      if(!want) return;
+      if(++fails>25){want=false; statusEl.textContent='ถอดเสียงหยุดทำงาน กด “ปิดไมค์” แล้วเปิดใหม่ หรือพิมพ์/วางข้อความเอง'; return}
+      setTimeout(()=>{ if(want){ try{rec.start()}catch(e){} } },MOBILE?200:0);
+    };
+    rec.onerror=ev=>{
+      const msg=SR_ERR[ev.error];
+      if(msg){ want=false; statusEl.textContent=msg; micBtn.classList.remove('on'); micBtn.textContent='เปิดไมค์'; mode='idle'; }
+      // no-speech / aborted: ไม่ต้องแจ้ง ปล่อยให้เริ่มฟังใหม่เอง
+    };
     try{rec.start()}catch(e){}
   }
   function stopRec(){want=false; if(rec){try{rec.stop()}catch(e){}} }
-  new MutationObserver(()=>{ $('mic').classList.contains('on')?startRec():stopRec() }).observe($('mic'),{attributes:true,attributeFilter:['class']});
 
   // ---------- summarize + export ----------
   const fmtVal=v=>Array.isArray(v)?v.map(x=>'- '+x).join('\n'):String(v??'');
@@ -376,6 +404,11 @@
     const a=document.createElement('a'); a.href=URL.createObjectURL(new Blob([data],{type:type+';charset=utf-8'})); a.download=name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
   }
+  $('bClear').onclick=()=>{
+    if(!ta.value.trim()){$('exStatus').textContent='ไม่มีข้อความให้ลบ';return}
+    if(!confirm('ลบข้อความทั้งหมดในกล่องนี้?')) return;
+    ta.value=''; finalText=''; $('exStatus').textContent='ลบข้อความแล้ว'; ta.focus();
+  };
   $('bExport').onclick=async()=>{
     const st=$('exStatus'), text=ta.value.trim(), fmt=$('fmt').value;
     if(!text){st.textContent='ยังไม่มีคำพูด เปิดไมค์ให้ AI ฟังก่อน หรือวางข้อความลงช่องด้านบน';return}
