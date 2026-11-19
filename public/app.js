@@ -87,6 +87,7 @@
         ? 'iPhone: แตะไอคอน “aA” ข้างช่องที่อยู่เว็บ → การตั้งค่าเว็บไซต์ → ไมโครโฟน → อนุญาต แล้วโหลดหน้าใหม่'
         : 'Android: แตะไอคอนด้านซ้ายของช่องที่อยู่เว็บ → สิทธิ์ → ไมโครโฟน → อนุญาต แล้วโหลดหน้าใหม่')
     : 'แตะไอคอนด้านซ้ายของช่องที่อยู่เว็บ → ไมโครโฟน → อนุญาต แล้วโหลดหน้าใหม่';
+  window.orbMobile=MOBILE; window.orbHowto=HOWTO;
   const DENIED='ไมค์ถูกบล็อกไว้ เบราว์เซอร์จะไม่ถามซ้ำ ต้องเปิดเอง: '+HOWTO;
   async function startMic(){
     try{
@@ -107,7 +108,7 @@
           tmp.getTracks().forEach(t=>t.stop());
           await new Promise(r=>setTimeout(r,300));
         }
-        startRec();
+        window.orbRec&&window.orbRec.start();
         mode='demo'; micBtn.classList.add('on'); micBtn.textContent='ปิดไมค์';
         statusEl.textContent='AI กำลังฟังคุณ… (ลูกบอลขยับตามจังหวะ ไม่ตามเสียงจริงบนมือถือ)';
         return;
@@ -117,7 +118,7 @@
       const src=ac.createMediaStreamSource(stream);
       analyser=ac.createAnalyser(); analyser.fftSize=512; analyser.smoothingTimeConstant=.78;
       src.connect(analyser);
-      startRec();
+      window.orbRec&&window.orbRec.start();
       mode='mic'; micBtn.classList.add('on'); micBtn.textContent='ปิดไมค์';
       statusEl.textContent='AI กำลังฟังคุณ…';
     }catch(e){
@@ -135,7 +136,7 @@
     if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
     if(ac){ac.close();ac=null}
     analyser=null; mode='idle';
-    try{stopRec()}catch(e){}
+    try{window.orbRec&&window.orbRec.stop()}catch(e){}
     micBtn.classList.remove('on');
     micBtn.textContent='เปิดไมค์';
     statusEl.textContent='แตะ “เปิดไมค์” เพื่อให้ AI เริ่มฟัง';
@@ -287,6 +288,7 @@
 // Admin, settings, export
 (function(){
   const $=id=>document.getElementById(id);
+  const MOBILE=!!window.orbMobile, HOWTO=window.orbHowto||'';
   const DEF={webhook:'',auth:'',lang:'th-TH',fields:[
     {key:'summary',desc:'สรุปใจความสำคัญไม่เกิน 3 ประโยค'},
     {key:'topics',desc:'หัวข้อหลักที่พูดถึง เป็นรายการ'},
@@ -414,6 +416,7 @@
     try{rec.start()}catch(e){}
   }
   function stopRec(){want=false; if(rec){try{rec.stop()}catch(e){}} }
+  window.orbRec={start:startRec,stop:stopRec};
 
   // ---------- summarize + export ----------
   const fmtVal=v=>Array.isArray(v)?v.map(x=>'- '+x).join('\n'):String(v??'');

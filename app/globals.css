@@ -69,3 +69,20 @@ body:not(.logo) #app>#brand{left:calc(clamp(58px,9vw,88px) + 1.5rem);min-height:
 
 .lrow{display:grid;grid-template-columns:1fr auto;gap:.4rem;align-items:center}
 .lrow button{padding:.4rem .7rem}
+
+/* ปุ่มเปิดไมค์ให้เด่นชัด */
+#mic{
+  min-width:min(78vw,300px);padding:1rem 2rem;font-size:1.3rem;font-weight:500;color:#fff;
+  background:linear-gradient(90deg,#3b8cff,#b04bff);border:2px solid #fff;border-radius:999px;
+  box-shadow:0 0 0 4px #3b8cff55,0 8px 30px #b04bffaa;
+  animation:micPulse 2.2s ease-in-out infinite;
+}
+#mic::before{content:"🎤 ";}
+#mic:hover{filter:brightness(1.15);background:linear-gradient(90deg,#3b8cff,#b04bff);border-color:#fff}
+#mic.on{animation:none;
+  background:linear-gradient(90deg,#ff3b6b,#ff8a3b);border-color:#fff;color:#fff;
+  box-shadow:0 0 0 4px #ff3b6b66,0 8px 30px #ff3b6baa;
+}
+#mic.on::before{content:"⏹ ";}
+@keyframes micPulse{0%,100%{box-shadow:0 0 0 4px #3b8cff55,0 8px 30px #b04bffaa}50%{box-shadow:0 0 0 12px #3b8cff22,0 8px 38px #b04bffcc}}
+@media (prefers-reduced-motion:reduce){#mic{animation:none}}
