@@ -122,10 +122,13 @@
       statusEl.textContent='AI กำลังฟังคุณ…';
     }catch(e){
       stopAll();
-      statusEl.textContent=(e&&(e.name==='NotAllowedError'||e.name==='SecurityError'))
-        ? DENIED
-        : (e&&e.name==='NotFoundError') ? 'ไม่พบไมค์ในเครื่องนี้'
-        : 'เปิดไมค์ไม่ได้ ตรวจสิทธิ์ไมค์ของเบราว์เซอร์';
+      const n=(e&&e.name)||'Error';
+      const code=' [รหัส: '+n+(e&&e.message?' – '+String(e.message).slice(0,80):'')+']';
+      statusEl.textContent=
+        (n==='NotAllowedError'||n==='SecurityError') ? DENIED
+        : n==='NotFoundError' ? 'ไม่พบไมค์ในเครื่องนี้'+code
+        : (n==='NotReadableError'||n==='AbortError'||n==='TrackStartError') ? 'เปิดไมค์ไม่ติด มักเกิดจากแอปอื่นกำลังใช้ไมค์อยู่ หรือไมค์ถูกปิดที่ระดับเครื่อง ปิดแอปอื่น (โทรศัพท์ แอปบันทึกเสียง/วิดีโอ ผู้ช่วยเสียง) แล้วเช็กตัวสลับไมค์ใน ตั้งค่า → ความเป็นส่วนตัว'+code
+        : 'เปิดไมค์ไม่ได้'+code;
     }
   }
   function stopAll(){
