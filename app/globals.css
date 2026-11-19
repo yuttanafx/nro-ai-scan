@@ -80,3 +80,24 @@ body:not(.logo) #app>#brand{left:calc(clamp(58px,9vw,88px) + 1.5rem);min-height:
 #mic:hover{background:#14175a;border-color:#fff}
 #mic.on{background:#3a0614;border-color:#ff5b7f;color:#fff;box-shadow:0 0 0 2px #ff5b7f44,0 0 18px #ff5b7fcc}
 #mic.on::before{content:"⏹ ";}
+
+/* ป๊อปอัพล็อกอินตอนกดเปิดไมค์ (ไม่ใช่หน้าตั้งค่าแอดมิน) */
+#app>#uModal{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;padding:1rem;background:#04050fcc;backdrop-filter:blur(8px)}
+#app>#uModal.show{display:flex}
+#uModal[hidden]{display:none}
+#uModal .card{width:min(92vw,380px);box-shadow:0 0 40px #7ff3ff33}
+
+/* โหมดโต้ตอบด้วยเสียง */
+#talk[hidden]{display:none}
+#chatlog{display:grid;gap:.45rem;max-height:10rem;overflow-y:auto;font-size:.93rem;line-height:1.5;white-space:pre-line}
+#chatlog:empty::before{content:"พูดคำถามได้เลย หยุดพูดสักครู่ AI จะตอบเป็นเสียง";color:var(--muted)}
+#chatlog .me{color:#9fb4ff}
+#chatlog .ai{color:#7affc9}
+
+/* คีย์ API ในหน้าตั้งค่า */
+#sKeysBox{display:grid;gap:.6rem;border:1px solid var(--line);border-radius:12px;padding:.6rem .8rem}
+#sKeysBox>summary{cursor:pointer;font-weight:500}
+#sKeysBox[open]>summary{margin-bottom:.4rem}
+.krow{display:grid;grid-template-columns:1fr auto;gap:.4rem;align-items:end}
+.krow button{padding:.5rem .8rem}
+.krow button[hidden]{display:none}

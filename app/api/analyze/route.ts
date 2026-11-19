@@ -1,21 +1,9 @@
-import Anthropic from "@anthropic-ai/sdk";
-import { isAuthed } from "@/lib/auth";
+import { isAuthed, isUser } from "@/lib/auth";
 import { loadCfg } from "@/lib/config";
+import { ask } from "@/lib/ai";
 import { ipOf, limited } from "@/lib/rate";
 
 export const maxDuration = 60;
-const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
-
-async function ask(prompt: string) {
-  const client = new Anthropic(); // อ่าน ANTHROPIC_API_KEY จาก env
-  const msg = await client.messages.create({
-    model: MODEL, max_tokens: 2000, messages: [{ role: "user", content: prompt }],
-  });
-  const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
-  const m = text.match(/[\[{][\s\S]*[\]}]/);
-  return JSON.parse(m ? m[0] : text);
-}
-
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   try {
@@ -34,6 +22,8 @@ export async function POST(req: Request) {
       return Response.json({ fields: arr });
     }
 
+    // ต้องล็อกอิน (ผู้ใช้ทั่วไปหรือแอดมิน) ถึงสั่ง AI สรุปได้ กันคนเรียก API ข้ามป๊อปอัพ
+    if (!(await isUser())) return Response.json({ error: "login_required" }, { status: 401 });
     if (limited("analyze:" + ipOf(req), 10, 60 * 1000)) {
       return Response.json({ error: "rate_limited" }, { status: 429 });
     }
@@ -66,7 +56,9 @@ export async function POST(req: Request) {
       } catch { webhook = "failed"; }
     }
     return Response.json({ fields, webhook });
-  } catch (e) {
+  } catch (e: any) {
+    if (String(e?.message).startsWith("no_key:"))
+      return Response.json({ error: "no_key", provider: String(e.message).slice(7) }, { status: 503 });
     console.error("analyze error", e);
     return Response.json({ error: "analyze_failed" }, { status: 500 });
   }

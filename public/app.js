@@ -141,11 +141,12 @@
     micBtn.textContent='เปิดไมค์';
     statusEl.textContent='แตะ “เปิดไมค์” เพื่อให้ AI เริ่มฟัง';
   }
-  micBtn.onclick=()=> micBtn.classList.contains('on')?stopAll():startMic();
+  micBtn.onclick=()=>{ if(micBtn.classList.contains('on')){stopAll();return} window.orbGate?window.orbGate(startMic):startMic(); };
 
+  let speaking=false; window.orbSpeaking=v=>{speaking=!!v};
   function readAudio(t){
-    if(mode==='mic'&&analyser){ analyser.getByteFrequencyData(freq); }
-    else if(mode==='demo'){
+    if(mode==='mic'&&analyser&&!speaking){ analyser.getByteFrequencyData(freq); }
+    else if(mode==='demo'||(speaking&&mode!=='idle')){
       const burst=Math.max(0,Math.sin(t*.9)*.7+Math.sin(t*2.3)*.4);
       for(let i=0;i<256;i++){
         const v=burst*(.55+.45*Math.sin(i*.17+t*3))*(1-i/330)+Math.max(0,Math.sin(i*.05-t*4))*.25*burst;
@@ -289,7 +290,7 @@
 (function(){
   const $=id=>document.getElementById(id);
   const MOBILE=!!window.orbMobile, HOWTO=window.orbHowto||'';
-  const DEF={webhook:'',auth:'',lang:'th-TH',fields:[
+  const DEF={webhook:'',auth:'',lang:'th-TH',provider:'anthropic',model:'',tables:'',tts:'browser',ttsVoice:'',fields:[
     {key:'summary',desc:'สรุปใจความสำคัญไม่เกิน 3 ประโยค'},
     {key:'topics',desc:'หัวข้อหลักที่พูดถึง เป็นรายการ'},
     {key:'action_items',desc:'งานหรือสิ่งที่ต้องทำต่อ เป็นรายการ'},
@@ -298,9 +299,17 @@
   let cfg=Object.assign({},DEF);
 
   // ---------- routing + server login ----------
-  let authed=false;
+  let authed=false, userOk=false, userName='', keys=null, pending=null, pendingFree=false;
+  const PNAME={anthropic:'Claude (ANTHROPIC_API_KEY)',openai:'GPT (OPENAI_API_KEY)',gemini:'Gemini (GEMINI_API_KEY)'};
+  function showKeys(){
+    const el=$('sKeys'); if(!el) return;
+    const db=$('sDb'); if(db) db.textContent=keys?(keys.supabase?'ตั้งค่า Supabase แล้ว':'ยังไม่ได้ตั้ง Supabase (กรอก URL และคีย์ในช่อง “คีย์ API” ด้านล่าง หรือเชื่อมปลั๊กอินบน Vercel แล้ว Redeploy)'):'';
+    if(!keys){el.textContent='';return}
+    const p=$('sProv').value;
+    el.textContent=(keys[p]?'ตั้งคีย์ของ ':'ยังไม่ได้ตั้งคีย์ของ ')+PNAME[p]+(keys[p]?' ไว้แล้ว':' กรอกในช่อง “คีย์ API” ด้านล่าง หรือใส่ใน Environment Variables');
+  }
   async function loadCfg(){
-    try{const r=await fetch('/api/config',{cache:'no-store'});const j=await r.json();cfg=Object.assign({},DEF,j.config||{})}catch(e){}
+    try{const r=await fetch('/api/config',{cache:'no-store'});const j=await r.json();cfg=Object.assign({},DEF,j.config||{});keys=j.keys||null}catch(e){}
     if(typeof applyLang==='function') applyLang();
   }
   function route(){
@@ -308,25 +317,119 @@
     $('login').classList.remove('show'); $('settings').classList.remove('show');
     if(h==='settings'&&!authed){location.hash='login';return}
     if(h==='login'){$('lTitle').textContent='เข้าสู่ระบบผู้ดูแล';$('lGo').textContent='เข้าสู่ระบบ';$('login').classList.add('show')}
-    if(h==='settings'){renderSettings();$('settings').classList.add('show')}
-    $('bOut').hidden=!authed;
+    if(h==='settings'){renderSettings();loadSecrets();$('settings').classList.add('show')}
+    $('bOut').hidden=!userOk; $('bLogin').hidden=userOk;
+    $('bOut').textContent=userOk&&userName?'ออกจากระบบ ('+userName+')':'ออกจากระบบ';
+    $('bSet').hidden=false;
   }
   window.addEventListener('hashchange',route);
   $('bSet').onclick=()=>{location.hash=authed?'settings':'login'};
-  $('bOut').onclick=async()=>{try{await fetch('/api/logout',{method:'POST'})}catch(e){} authed=false;await loadCfg();location.hash='';route()};
+  $('bOut').onclick=async()=>{try{await fetch('/api/logout',{method:'POST'})}catch(e){} authed=false;userOk=false;userName='';try{window.orbRec&&window.orbRec.stop()}catch(e){}await loadCfg();location.hash='';route()};
   $('lBack').onclick=$('sBack').onclick=()=>{location.hash=''};
   $('lGo').onclick=async()=>{
     const u=$('lu').value.trim(), p=$('lp').value; $('lErr').textContent='';
     if(!u||!p){$('lErr').textContent='กรอกชื่อผู้ใช้และรหัสผ่าน';return}
     try{
-      const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({u,p})});
+      const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({u,p,as:'admin'})});
       if(r.status===429){$('lErr').textContent='ลองบ่อยเกินไป รอสักครู่';return}
+      if(r.status===403){$('lErr').textContent='บัญชีนี้ไม่ใช่แอดมิน เข้าหน้าตั้งค่าไม่ได้';return}
       if(r.status===500){$('lErr').textContent='เซิร์ฟเวอร์ยังไม่ได้ตั้งค่าผู้ดูแล (ดู README)';return}
       if(!r.ok){$('lErr').textContent='ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';return}
-      authed=true; $('lp').value=''; await loadCfg(); location.hash='settings'; route();
+      authed=true; userOk=true; userName=u; $('lp').value=''; await loadCfg(); location.hash='settings'; route();
     }catch(e){$('lErr').textContent='เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'}
   };
-  fetch('/api/me').then(r=>r.json()).then(j=>{authed=!!j.ok;route();if(authed)loadCfg()}).catch(()=>{});
+  fetch('/api/me').then(r=>r.json()).then(j=>{authed=!!j.ok;userOk=!!j.user;userName=j.name||'';route();if(authed)loadCfg()}).catch(()=>{});
+
+  // ---------- popup ล็อกอินผู้ใช้ (เด้งตอนกดเปิดไมค์) ----------
+  const um=$('uModal'); let lastFocus=null;
+  function openUser(){
+    lastFocus=document.activeElement; $('uErr').textContent='';
+    um.hidden=false; um.classList.add('show'); setTimeout(()=>$('uu').focus(),30);
+  }
+  function closeUser(clearPending){
+    um.classList.remove('show'); um.hidden=true; $('up').value='';
+    if(clearPending) pending=null;
+    if(lastFocus&&lastFocus.focus) try{lastFocus.focus()}catch(e){}
+  }
+  // ครอบการทำงานที่ต้องล็อกอิน: ล็อกอินแล้วทำเลย ยังไม่ล็อกอินให้เด้งป๊อปอัพ
+  window.orbGate=(fn,noGesture)=>{ if(userOk){fn();return} pending=fn; pendingFree=!!noGesture; openUser(); };
+  $('bLogin').onclick=()=>{pending=null;openUser()};
+  $('uCancel').onclick=()=>closeUser(true);
+  um.addEventListener('mousedown',e=>{if(e.target===um)closeUser(true)});
+  um.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){closeUser(true);return}
+    if(e.key==='Enter'&&e.target.tagName==='INPUT'){$('uGo').click();return}
+    if(e.key==='Tab'){ // ไม่ให้โฟกัสหลุดออกนอกป๊อปอัพ
+      const f=[...um.querySelectorAll('input,button')].filter(x=>!x.disabled);
+      const a=f[0], z=f[f.length-1];
+      if(e.shiftKey&&document.activeElement===a){e.preventDefault();z.focus()}
+      else if(!e.shiftKey&&document.activeElement===z){e.preventDefault();a.focus()}
+    }
+  });
+  $('uGo').onclick=async()=>{
+    const u=$('uu').value.trim(), p=$('up').value; $('uErr').textContent='';
+    if(!u||!p){$('uErr').textContent='กรอกชื่อผู้ใช้และรหัสผ่าน';return}
+    $('uGo').disabled=true;
+    try{
+      const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({u,p})});
+      if(r.status===429){$('uErr').textContent='ลองบ่อยเกินไป รอสักครู่';return}
+      if(r.status===500){$('uErr').textContent='เซิร์ฟเวอร์ยังไม่ได้ตั้งค่าบัญชีผู้ใช้ (ดู README)';return}
+      if(!r.ok){$('uErr').textContent='ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง';return}
+      const j=await r.json().catch(()=>({}));
+      userOk=true; userName=j.name||u; authed=j.role==='admin';
+      if(authed) await loadCfg();
+      $('uu').value=''; const fn=pending, free=pendingFree; pending=null; pendingFree=false; closeUser(false); route();
+      if(fn){
+        // มือถือ: เบราว์เซอร์ต้องการให้กดไมค์เองหลังรอเครือข่าย จึงไม่เริ่มเอง
+        if(window.orbMobile&&!free){ $('status').textContent='เข้าสู่ระบบแล้ว กด “เปิดไมค์” อีกครั้งเพื่อเริ่มฟัง' }
+        else fn();
+      }
+    }catch(e){$('uErr').textContent='เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'}
+    finally{$('uGo').disabled=false}
+  };
+
+
+  // ---------- คีย์ API (แอดมิน) ----------
+  const KEYF=[['anthropic','kAnth'],['openai','kOai'],['gemini','kGem'],['github','kGh'],['azureKey','kAzK'],['azureRegion','kAzR'],['supabaseUrl','kSbU'],['supabaseKey','kSbK']];
+  const PLAINF=['azureRegion','supabaseUrl'];
+  let sec={fields:{}};
+  function renderSecrets(){
+    KEYF.forEach(([k,id])=>{
+      const el=$(id), st=(sec.fields&&sec.fields[k])||{};
+      if(PLAINF.includes(k)){ el.value=st.value||''; el.placeholder=el.dataset.ph||'' }
+      else{
+        el.value='';
+        el.placeholder=st.set?('•••• '+(st.hint||'')+' ('+(st.source==='saved'?'บันทึกไว้แล้ว':'จาก Environment Variables')+') เว้นว่าง = ไม่เปลี่ยน'):'ยังไม่ได้ตั้งค่า';
+      }
+      $(id+'X').hidden=st.source!=='saved';
+    });
+    $('kPersist').textContent=sec.needsStore?'ต้องต่อ Upstash Redis (Vercel → Storage → Marketplace) ก่อน ถึงจะบันทึกคีย์ในหน้านี้ได้ ระหว่างนี้ใส่ใน Environment Variables แทน':sec.canSave===false?'ยังไม่ได้ตั้ง SESSION_SECRET จึงบันทึกคีย์ไม่ได้':(sec.persistent===false?'ยังไม่ได้ต่อ Upstash Redis คีย์ที่บันทึกจะหายเมื่อเซิร์ฟเวอร์รีสตาร์ต ควรต่อก่อนใช้งานจริง':'');
+    if(sec.keys){ keys=sec.keys; showKeys() }
+  }
+  async function loadSecrets(){
+    try{const r=await fetch('/api/secrets',{cache:'no-store'}); if(r.ok){sec=await r.json(); renderSecrets()}}catch(e){}
+  }
+  async function putSecrets(body,msg){
+    $('kMsg').textContent='กำลังบันทึก…';
+    try{
+      const r=await fetch('/api/secrets',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+      if(r.status===401){$('kMsg').textContent='หมดเวลาเข้าสู่ระบบ ล็อกอินแอดมินใหม่';return}
+      const j=await r.json().catch(()=>({}));
+      if(!r.ok){$('kMsg').textContent=j.error==='bad_value'?'ค่าของช่อง '+j.field+' ไม่ถูกต้อง (ห้ามมีช่องว่าง)':j.error==='no_session_secret'?'ยังไม่ได้ตั้ง SESSION_SECRET':j.error==='no_store'?'ต้องต่อ Upstash Redis ก่อนถึงจะบันทึกคีย์ได้ (ดูข้อความด้านล่าง)':'บันทึกไม่สำเร็จ';return}
+      sec=j; renderSecrets(); $('kMsg').textContent=msg;
+    }catch(e){$('kMsg').textContent='เชื่อมต่อเซิร์ฟเวอร์ไม่ได้'}
+  }
+  $('kSave').onclick=()=>{
+    const set={}, clear=[];
+    KEYF.forEach(([k,id])=>{
+      const v=$(id).value.trim(), st=(sec.fields&&sec.fields[k])||{};
+      if(PLAINF.includes(k)){ if(v&&v!==st.value) set[k]=v; else if(!v&&st.source==='saved') clear.push(k) }
+      else if(v) set[k]=v;
+    });
+    if(!Object.keys(set).length&&!clear.length){$('kMsg').textContent='ไม่มีอะไรเปลี่ยน';return}
+    putSecrets({set,clear},'บันทึกคีย์แล้ว (เข้ารหัสเก็บบนเซิร์ฟเวอร์)');
+  };
+  KEYF.forEach(([k,id])=>{ $(id+'X').onclick=()=>{ if(confirm('ลบค่าที่บันทึกไว้ของช่องนี้?')) putSecrets({clear:[k]},'ลบแล้ว (ถ้ามีใน Environment Variables จะกลับไปใช้ค่านั้น)') } });
 
   // ---------- settings ----------
   const MAXL=5; let links=[''];
@@ -344,7 +447,8 @@
   }
   $('sLinkAdd').onclick=()=>{ if(links.length<MAXL){links.push(''); renderLinks(); const ins=$('sLinks').querySelectorAll('input'); ins[ins.length-1].focus()} };
   function renderSettings(){
-    $('sWh').value=cfg.webhook; $('sAuth').value=cfg.auth; $('sLang').value=cfg.lang; links=(cfg.ghUrl||'').split(/[\s,]+/).filter(Boolean); if(!links.length) links=['']; renderLinks(); $('sRef').value=cfg.ref||'';
+    $('sProv').value=cfg.provider||'anthropic'; $('sModel').value=cfg.model||''; showKeys();
+    $('sWh').value=cfg.webhook; $('sAuth').value=cfg.auth; $('sLang').value=cfg.lang; links=(cfg.ghUrl||'').split(/[\s,]+/).filter(Boolean); if(!links.length) links=['']; renderLinks(); $('sRef').value=cfg.ref||''; $('sTables').value=cfg.tables||''; $('sTts').value=cfg.tts||'browser'; $('sTtsVoice').value=cfg.ttsVoice||'';
     const box=$('sFields'); box.innerHTML='';
     cfg.fields.forEach((f,i)=>{
       const r=document.createElement('div'); r.className='frow';
@@ -356,9 +460,10 @@
       r.append(k,d,x); box.append(r);
     });
   }
+  $('sProv').addEventListener('change',showKeys);
   $('sAdd').onclick=()=>{cfg.fields.push({key:'',desc:''});renderSettings()};
   function readCfg(){
-    cfg.webhook=$('sWh').value.trim(); cfg.auth=$('sAuth').value.trim(); cfg.lang=$('sLang').value; cfg.ghUrl=links.map(x=>x.trim()).filter(Boolean).slice(0,MAXL).join('\n'); cfg.ref=$('sRef').value.slice(0,12000);
+    cfg.webhook=$('sWh').value.trim(); cfg.auth=$('sAuth').value.trim(); cfg.lang=$('sLang').value; cfg.provider=$('sProv').value; cfg.model=$('sModel').value.trim(); cfg.ghUrl=links.map(x=>x.trim()).filter(Boolean).slice(0,MAXL).join('\n'); cfg.ref=$('sRef').value.slice(0,12000); cfg.tables=$('sTables').value.trim().slice(0,2000); cfg.tts=$('sTts').value; cfg.ttsVoice=$('sTtsVoice').value.trim();
     cfg.fields=cfg.fields.map(f=>({key:f.key.trim().replace(/\s+/g,'_'),desc:f.desc.trim()})).filter(f=>f.key);
   }
   async function save(){
@@ -400,11 +505,11 @@
     rec.continuous=!MOBILE; // มือถือ (โดยเฉพาะ Android) โหมดต่อเนื่องทำข้อความซ้ำ/ตัดเสียง จึงใช้ทีละประโยคแล้วเริ่มใหม่
     rec.onresult=e=>{
       fails=0; let it='';
-      for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript; if(e.results[i].isFinal) finalText+=t+' '; else it+=t}
-      ta.value=finalText+it; ta.scrollTop=ta.scrollHeight;
+      for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript; if(e.results[i].isFinal){finalText+=t+' '; utter+=t+' '} else it+=t}
+      ta.value=finalText+it; ta.scrollTop=ta.scrollHeight; talkTick();
     };
     rec.onend=()=>{
-      if(!want) return;
+      if(!want||paused) return;
       if(++fails>25){want=false; statusEl.textContent='ถอดเสียงหยุดทำงาน กด “ปิดไมค์” แล้วเปิดใหม่ หรือพิมพ์/วางข้อความเอง'; return}
       setTimeout(()=>{ if(want){ try{rec.start()}catch(e){} } },MOBILE?200:0);
     };
@@ -415,8 +520,137 @@
     };
     try{rec.start()}catch(e){}
   }
-  function stopRec(){want=false; if(rec){try{rec.stop()}catch(e){}} }
+  function stopRec(){want=false; paused=false; talkReset(); if(rec){try{rec.stop()}catch(e){}} }
   window.orbRec={start:startRec,stop:stopRec};
+
+  // ---------- โหมดโต้ตอบด้วยเสียง (ฟัง → ถามเซิร์ฟเวอร์ → พูดตอบ) ----------
+  const SILENCE=1600; // เงียบกี่มิลลิวินาทีถึงถือว่าพูดจบ (เพิ่มถ้า AI ตัดบทเร็วไป)
+  let talk=false, utter='', idleT=null, busy=false, paused=false, chat=[], speakId=0, spk=false;
+  const log=$('chatlog');
+  function addLine(cls,text){
+    const d=document.createElement('div'); d.className=cls; d.textContent=(cls==='me'?'คุณ: ':'AI: ')+text;
+    log.append(d); while(log.children.length>20) log.firstChild.remove(); log.scrollTop=log.scrollHeight;
+  }
+  function setTalk(on){
+    talk=on; ls.set('orb_talk',on?'1':'0');
+    $('bTalk').textContent='โต้ตอบ: '+(on?'เปิด':'ปิด'); $('bTalk').classList.toggle('on',on); $('bTalk').setAttribute('aria-pressed',on);
+    $('talk').hidden=!on;
+    if(!on) talkReset();
+  }
+  function talkReset(){
+    clearTimeout(idleT); utter=''; speakId++; spk=false;
+    stopVoice();
+    window.orbSpeaking&&window.orbSpeaking(false);
+  }
+  function talkTick(){ if(!talk||paused||busy) return; clearTimeout(idleT); idleT=setTimeout(flush,SILENCE) }
+  function flush(){ const q=utter.trim(); utter=''; if(q.length>=2&&talk&&want&&!busy&&!paused) askAI(q) }
+
+  async function askAI(q){
+    busy=true; clearTimeout(idleT);
+    chat.push({role:'user',content:q}); chat=chat.slice(-8);
+    addLine('me',q); statusEl.textContent='AI กำลังคิด…';
+    let reply='', err='';
+    try{
+      const r=await fetch('/api/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({messages:chat})});
+      if(r.status===401){ userOk=false; authed=false; route(); err='ต้องเข้าสู่ระบบก่อน'; window.orbGate(()=>{},true) }
+      else if(r.status===429) err='ถามถี่เกินไป รอสักครู่แล้วถามใหม่'
+      else if(!r.ok){ const e=await r.json().catch(()=>({})); err=e.error==='no_key'?'ผู้ดูแลยังไม่ได้ใส่คีย์ API ของ '+(PNAME[e.provider]||e.provider)+' ในเซิร์ฟเวอร์':'AI ตอบไม่ได้ในตอนนี้ ลองใหม่อีกครั้ง' }
+      else reply=((await r.json()).reply||'').trim();
+    }catch(e){ err='เชื่อมต่อเซิร์ฟเวอร์ไม่ได้' }
+    busy=false;
+    if(!reply){ chat.pop(); statusEl.textContent=err||'AI ไม่มีคำตอบ ลองถามใหม่'; if(want&&utter.trim()) talkTick(); return }
+    chat.push({role:'assistant',content:reply}); addLine('ai',reply); speak(reply);
+  }
+
+  function pickVoice(){
+    try{
+      const vs=window.speechSynthesis.getVoices(), l=(cfg.lang||'th-TH').toLowerCase();
+      return vs.find(v=>v.lang.toLowerCase().replace('_','-')===l)||vs.find(v=>v.lang.toLowerCase().startsWith(l.slice(0,2)))||null;
+    }catch(e){return null}
+  }
+  function chunks(t){
+    const out=[];
+    for(const line of t.split(/\n+/)){
+      let cur='';
+      for(const w of line.split(/\s+/)){ if(!w) continue; if((cur+' '+w).length>150&&cur){out.push(cur);cur=w}else cur=cur?cur+' '+w:w }
+      if(cur) out.push(cur);
+    }
+    return out.length?out:[t];
+  }
+  function pauseRec(){ paused=true; clearTimeout(idleT); if(rec){try{rec.stop()}catch(e){}} }
+  function resumeRec(){
+    paused=false; if(!want||!rec) return; fails=0;
+    try{rec.start()}catch(e){ setTimeout(()=>{ if(want&&!paused){try{rec.start()}catch(e2){}} },350) }
+  }
+  function finishSpeak(id){
+    if(id!==speakId||!spk) return; spk=false;
+    window.orbSpeaking&&window.orbSpeaking(false);
+    resumeRec();
+    if(want) statusEl.textContent='AI กำลังฟังคุณ…';
+    if(utter.trim()) talkTick();
+  }
+  // เสียงจากบริการภายนอก (OpenAI/Azure) เล่นผ่านตัวเล่นเดียวที่ “ปลดล็อก” ไว้ตอนผู้ใช้แตะหน้าจอครั้งแรก (มือถือกันเล่นเสียงเอง)
+  const player=new Audio(); player.preload='auto';
+  const SILENT='data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=';
+  let unlocked=false;
+  ['click','touchend','keydown'].forEach(ev=>document.addEventListener(ev,()=>{
+    if(unlocked) return; unlocked=true; try{player.src=SILENT; const p=player.play(); if(p&&p.catch) p.catch(()=>{})}catch(e){}
+  },{passive:true}));
+  function stopVoice(){
+    try{player.pause()}catch(e){}
+    try{window.speechSynthesis&&window.speechSynthesis.cancel()}catch(e){}
+  }
+  function speakBrowser(text,id){
+    const ss=window.speechSynthesis;
+    if(!ss||!window.SpeechSynthesisUtterance){ finishSpeak(id); statusEl.textContent='เบราว์เซอร์นี้พูดออกเสียงไม่ได้ ดูคำตอบในกล่องข้อความ'; return }
+    ss.cancel();
+    const v=pickVoice(), parts=chunks(text);
+    parts.forEach((p,i)=>{
+      const u=new SpeechSynthesisUtterance(p); u.lang=cfg.lang||'th-TH'; if(v) u.voice=v;
+      if(i===parts.length-1){ u.onend=()=>finishSpeak(id); u.onerror=()=>finishSpeak(id) }
+      else u.onerror=()=>finishSpeak(id);
+      ss.speak(u);
+    });
+  }
+  async function speakRemote(text,id){
+    try{
+      const r=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
+      if(id!==speakId) return; // ถูกยกเลิกระหว่างรอไฟล์เสียง
+      if(!r.ok) throw new Error('tts '+r.status);
+      const url=URL.createObjectURL(await r.blob());
+      if(id!==speakId){ URL.revokeObjectURL(url); return }
+      player.onended=()=>{ URL.revokeObjectURL(url); finishSpeak(id) };
+      player.onerror=()=>{ URL.revokeObjectURL(url); if(id===speakId) speakBrowser(text,id) };
+      player.src=url; await player.play();
+    }catch(e){ if(id===speakId) speakBrowser(text,id) } // บริการเสียงมีปัญหา/เล่นไม่ได้ ถอยกลับไปใช้เสียงในเครื่อง
+  }
+  function speak(text){
+    const remote=(cfg.tts||'browser')!=='browser';
+    if(!remote&&(!window.speechSynthesis||!window.SpeechSynthesisUtterance)){ statusEl.textContent='เบราว์เซอร์นี้พูดออกเสียงไม่ได้ ดูคำตอบในกล่องข้อความ'; return }
+    stopVoice(); const id=++speakId; spk=true; pauseRec(); // หยุดฟังระหว่างพูด ไม่งั้นไมค์จะฟังเสียงตัวเอง
+    window.orbSpeaking&&window.orbSpeaking(true); statusEl.textContent='AI กำลังพูด…';
+    if(remote) speakRemote(text,id); else speakBrowser(text,id);
+  }
+
+  $('sTtsTest').onclick=async()=>{
+    const m=$('sTtsMsg'); m.textContent='กำลังบันทึกและทดสอบ…';
+    try{
+      await save();
+      if((cfg.tts||'browser')==='browser'){
+        const ss=window.speechSynthesis; if(!ss){m.textContent='เบราว์เซอร์นี้พูดออกเสียงไม่ได้';return}
+        ss.cancel(); const u=new SpeechSynthesisUtterance('สวัสดี ทดสอบเสียง'); u.lang=cfg.lang||'th-TH'; const v=pickVoice(); if(v) u.voice=v; ss.speak(u);
+        m.textContent=v?'กำลังเล่นเสียงในเครื่อง':'เครื่องนี้ไม่มีเสียงภาษานี้ อาจไม่พูดหรืออ่านเพี้ยน ลองเลือก OpenAI หรือ Azure'; return;
+      }
+      const r=await fetch('/api/tts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:'สวัสดีครับ ทดสอบเสียงพูดตอบ'})});
+      if(!r.ok){ const e=await r.json().catch(()=>({})); m.textContent=e.error==='no_key'?'ยังไม่ได้ตั้งคีย์ของ '+(e.provider==='azure'?'Azure Speech (ต้องมีทั้ง Key และ Region)':'OpenAI'):'บริการเสียงตอบกลับไม่สำเร็จ (รหัส '+(e.status||r.status)+') ตรวจคีย์ ชื่อเสียง และ Region'; return }
+      const url=URL.createObjectURL(await r.blob()); player.onended=()=>URL.revokeObjectURL(url); player.onerror=null; player.src=url; await player.play();
+      m.textContent='กำลังเล่นเสียงทดสอบ ถ้าได้ยินแล้วแปลว่าใช้ได้';
+    }catch(e){ m.textContent='ทดสอบไม่สำเร็จ ลองใหม่อีกครั้ง' }
+  };
+  $('bStopSpeak').onclick=()=>{ const id=speakId; stopVoice(); finishSpeak(id) };
+  $('bTalk').onclick=()=>setTalk(!talk);
+  setTalk(ls.get('orb_talk')==='1');
+
 
   // ---------- summarize + export ----------
   const fmtVal=v=>Array.isArray(v)?v.map(x=>'- '+x).join('\n'):String(v??'');
@@ -447,7 +681,12 @@
     try{
       const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})});
       if(r.status===429){st.textContent='ใช้งานถี่เกินไป รอสักครู่แล้วลองใหม่';return}
-      if(!r.ok) throw new Error('HTTP '+r.status);
+      if(r.status===401){userOk=false;authed=false;route();st.textContent='ต้องเข้าสู่ระบบก่อนสรุป ล็อกอินแล้วกดสรุปอีกครั้ง';window.orbGate(()=>$('bExport').click(),true);return}
+      if(!r.ok){
+        const e=await r.json().catch(()=>({}));
+        if(e.error==='no_key'){st.textContent='ผู้ดูแลยังไม่ได้ใส่คีย์ API ของ '+(PNAME[e.provider]||e.provider)+' ในเซิร์ฟเวอร์';return}
+        throw new Error('HTTP '+r.status);
+      }
       const j=await r.json(); fields=j.fields||{}; hook=j.webhook;
     }catch(e){st.textContent='สรุปไม่สำเร็จ ลองใหม่อีกครั้ง';return}
     const name='สรุปคำพูด-'+at.slice(0,16).replace(/[:T]/g,'-')+'.'+fmt;
@@ -456,7 +695,7 @@
   };
 
   // ---------- GitHub reference ----------
-  [['sWh','webhook'],['sAuth','auth'],['sLang','lang'],['sRef','ref']].forEach(([id,k])=>$(id).addEventListener('input',()=>{cfg[k]=$(id).value}));
+  [['sProv','provider'],['sModel','model'],['sWh','webhook'],['sAuth','auth'],['sLang','lang'],['sRef','ref'],['sTables','tables'],['sTts','tts'],['sTtsVoice','ttsVoice']].forEach(([id,k])=>$(id).addEventListener('input',()=>{cfg[k]=$(id).value}));
   function parseGh(u){return /(^|[\s,])https?:\/\//.test(u)}
   async function loadGh(u){
     const r=await fetch('/api/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u})});

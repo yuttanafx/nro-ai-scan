@@ -1,6 +1,7 @@
 import dns from "dns/promises";
 import net from "net";
 import { isAuthed } from "@/lib/auth";
+import { getSecrets } from "@/lib/secrets";
 
 export const maxDuration = 60;
 
@@ -63,7 +64,8 @@ async function getPage(u: string, hops = 0): Promise<string> {
 
 async function getGithub(g: { o: string; r: string; b: string; p: string }, budget: number) {
   const headers: Record<string, string> = { Accept: "application/vnd.github+json", "User-Agent": "orb" };
-  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const ghToken = (await getSecrets()).github;
+  if (ghToken) headers.Authorization = `Bearer ${ghToken}`;
   const r = await fetch(`https://api.github.com/repos/${g.o}/${g.r}/contents/${g.p}${g.b ? `?ref=${encodeURIComponent(g.b)}` : ""}`,
     { headers, signal: AbortSignal.timeout(15000), cache: "no-store" });
   if (!r.ok) throw new Error(r.status === 404 ? "not_found" : "github_" + r.status);
@@ -76,7 +78,7 @@ async function getGithub(g: { o: string; r: string; b: string; p: string }, budg
   let out = "";
   for (const f of files) {
     if (out.length >= budget) break;
-    const t = await fetch(f.download_url, { headers: process.env.GITHUB_TOKEN ? { Authorization: headers.Authorization } : {}, signal: AbortSignal.timeout(15000) });
+    const t = await fetch(f.download_url, { headers: ghToken ? { Authorization: headers.Authorization } : {}, signal: AbortSignal.timeout(15000) });
     if (t.ok) out += `### ${f.path}\n${(await t.text()).slice(0, 6000)}\n\n`;
   }
   return out.slice(0, budget);

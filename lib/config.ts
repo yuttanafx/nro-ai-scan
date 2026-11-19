@@ -1,8 +1,13 @@
+import { kvGet, kvSet } from "@/lib/store";
 export type Field = { key: string; desc: string };
-export type Cfg = { webhook: string; auth: string; lang: string; ghUrl: string; ref: string; fields: Field[] };
+export type Tts = "browser" | "openai" | "azure";
+export const TTS_MODES: Tts[] = ["browser", "openai", "azure"];
+export type Provider = "anthropic" | "openai" | "gemini";
+export const PROVIDERS: Provider[] = ["anthropic", "openai", "gemini"];
+export type Cfg = { webhook: string; auth: string; lang: string; ghUrl: string; ref: string; provider: Provider; model: string; tables: string; tts: Tts; ttsVoice: string; fields: Field[] };
 
 export const DEFAULT: Cfg = {
-  webhook: "", auth: "", lang: "th-TH", ghUrl: "", ref: "",
+  webhook: "", auth: "", lang: "th-TH", ghUrl: "", ref: "", provider: "anthropic", model: "", tables: "", tts: "browser", ttsVoice: "",
   fields: [
     { key: "summary", desc: "สรุปใจความสำคัญไม่เกิน 3 ประโยค" },
     { key: "topics", desc: "หัวข้อหลักที่พูดถึง เป็นรายการ" },
@@ -12,9 +17,6 @@ export const DEFAULT: Cfg = {
 };
 
 const KEY = "orb_config";
-const url = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
-const token = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
-let mem: Cfg | null = null;
 
 const str = (v: unknown, max: number) => (typeof v === "string" ? v.slice(0, max) : "");
 
@@ -30,28 +32,25 @@ export function sanitize(c: Partial<Cfg>): Cfg {
     lang: ["th-TH", "en-US", "ja-JP", "zh-CN"].includes(c.lang || "") ? (c.lang as string) : "th-TH",
     ghUrl: str(c.ghUrl, 2000).trim(),
     ref: str(c.ref, 12000),
+    provider: PROVIDERS.includes(c.provider as Provider) ? (c.provider as Provider) : "anthropic",
+    model: str(c.model, 100).trim(),
+    tables: str(c.tables, 2000).trim(),
+    tts: TTS_MODES.includes(c.tts as Tts) ? (c.tts as Tts) : "browser",
+    ttsVoice: str(c.ttsVoice, 60).trim().replace(/[^A-Za-z0-9_-]/g, ""),
     fields: fields.length ? fields : DEFAULT.fields,
   };
 }
 
 export async function loadCfg(): Promise<Cfg> {
   try {
-    if (url && token) {
-      const r = await fetch(`${url}/get/${KEY}`, { headers: { Authorization: `Bearer ${token}` }, cache: "no-store" });
-      const j = await r.json();
-      if (j.result) return sanitize(JSON.parse(j.result));
-    } else if (mem) return mem;
+    const raw = await kvGet(KEY);
+    if (raw) return sanitize(JSON.parse(raw));
   } catch {}
   return DEFAULT;
 }
 
 export async function saveCfg(c: Partial<Cfg>): Promise<Cfg> {
   const clean = sanitize(c);
-  if (url && token) {
-    const r = await fetch(`${url}/set/${KEY}`, {
-      method: "POST", headers: { Authorization: `Bearer ${token}` }, body: JSON.stringify(clean),
-    });
-    if (!r.ok) throw new Error("store_failed");
-  } else mem = clean;
+  await kvSet(KEY, JSON.stringify(clean));
   return clean;
 }

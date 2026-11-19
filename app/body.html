@@ -32,7 +32,12 @@
 
 <img id="logo" src="/logo.jpg" alt="โลโก้เครือข่ายร่วมมือเพื่อประชาชน ทวิภาคีเพื่อความเป็นธรรม" width="88" height="88">
 <div id="brand"><b>NRO.</b><span>(National Rescue Organization)</span></div>
-<div id="top"><button id="bMode">ใช้ลูกบอล</button><button id="bTx" aria-controls="export" aria-expanded="true">ซ่อนข้อความ</button><button id="bSet">ตั้งค่า</button><button id="bOut" hidden>ออกจากระบบ</button></div>
+<div id="top"><button id="bTalk" aria-pressed="false">โต้ตอบ: ปิด</button><button id="bMode">ใช้ลูกบอล</button><button id="bTx" aria-controls="export" aria-expanded="true">ซ่อนข้อความ</button><button id="bLogin">เข้าสู่ระบบ</button><button id="bSet">ตั้งค่า</button><button id="bOut" hidden>ออกจากระบบ</button></div>
+
+<div class="card" id="talk" hidden>
+  <div id="chatlog" role="log" aria-live="polite"></div>
+  <button id="bStopSpeak" type="button">หยุดพูด</button>
+</div>
 
 <div class="card" id="export">
   <label>คำพูดที่ฟังได้ (แก้ไขหรือวางข้อความเองได้)
@@ -53,7 +58,7 @@
 </div>
 
 <section id="login" aria-label="เข้าสู่ระบบ"><div class="card">
-  <h2 id="lTitle">เข้าสู่ระบบผู้ดูแล</h2>
+  <h2 id="lTitle">เข้าสู่ระบบแอดมิน (เฉพาะตั้งค่า)</h2>
   <label>ชื่อผู้ใช้<input id="lu" autocomplete="username"></label>
   <label>รหัสผ่าน<input id="lp" type="password" autocomplete="current-password"></label>
   <div class="err" id="lErr" role="alert"></div>
@@ -66,6 +71,32 @@
   <h2>ตั้งค่าการวิเคราะห์</h2>
   <label>Webhook URL (ปลายทางที่รับผลสรุป)<input id="sWh" placeholder="https://ปลายทางของคุณ/webhook (ห้ามใช้ /api/analyze ของเว็บนี้)" inputmode="url"></label>
   <label>ส่วนหัว Authorization (ไม่บังคับ)<input id="sAuth" placeholder="Bearer ..."></label>
+  <label>AI ที่ใช้สรุป
+    <select id="sProv"><option value="anthropic">Claude (Anthropic)</option><option value="openai">GPT (OpenAI)</option><option value="gemini">Gemini (Google)</option></select></label>
+  <label>ชื่อโมเดล (เว้นว่างเพื่อใช้ค่าเริ่มต้นของเจ้านั้น)
+    <input id="sModel" placeholder="เช่น gpt-6-luna หรือ gemini-3.5-flash"></label>
+<details id="sKeysBox">
+  <summary>คีย์ API และบริการภายนอก (กรอกที่นี่แทนการใส่ใน Vercel ได้)</summary>
+  <div class="note">คีย์ที่บันทึกจะถูกเข้ารหัสก่อนเก็บ และไม่ถูกส่งกลับมาแสดงอีก เว้นว่าง = ไม่เปลี่ยน ถ้าไม่ได้กรอก ระบบจะใช้ค่าจาก Environment Variables</div>
+  <div class="krow"><label>Anthropic (Claude) API Key<input id="kAnth" type="password" data-ph="sk-ant-..." placeholder="sk-ant-..." autocomplete="new-password" spellcheck="false"></label><button id="kAnthX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>OpenAI API Key<input id="kOai" type="password" data-ph="sk-..." placeholder="sk-..." autocomplete="new-password" spellcheck="false"></label><button id="kOaiX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>Google Gemini API Key<input id="kGem" type="password" data-ph="AIza..." placeholder="AIza..." autocomplete="new-password" spellcheck="false"></label><button id="kGemX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>GitHub Token (อ่านอย่างเดียว ใช้ดึงสคีมาจาก repo private)<input id="kGh" type="password" data-ph="github_pat_..." placeholder="github_pat_..." autocomplete="new-password" spellcheck="false"></label><button id="kGhX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>Azure Speech Key (เสียงพูดตอบ)<input id="kAzK" type="password" data-ph="" placeholder="" autocomplete="new-password" spellcheck="false"></label><button id="kAzKX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>Azure Speech Region เช่น southeastasia<input id="kAzR" type="text" data-ph="southeastasia" placeholder="southeastasia" autocomplete="off" spellcheck="false"></label><button id="kAzRX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>Supabase URL<input id="kSbU" type="text" data-ph="https://xxxx.supabase.co" placeholder="https://xxxx.supabase.co" autocomplete="off" spellcheck="false"></label><button id="kSbUX" type="button" hidden>ลบ</button></div>
+  <div class="krow"><label>Supabase Key (service role หรือ anon)<input id="kSbK" type="password" data-ph="" placeholder="" autocomplete="new-password" spellcheck="false"></label><button id="kSbKX" type="button" hidden>ลบ</button></div>
+  <button class="go" id="kSave" type="button">บันทึกคีย์</button>
+  <div class="note" id="kMsg" role="status"></div>
+  <div class="note" id="kPersist" role="status"></div>
+</details>
+<label>เสียงที่ AI พูดตอบ
+    <select id="sTts"><option value="browser">เสียงในเครื่อง (ฟรี คุณภาพขึ้นกับอุปกรณ์)</option><option value="openai">OpenAI TTS (ใช้คีย์ OpenAI)</option><option value="azure">Azure Speech (เสียงไทยโดยเฉพาะ)</option></select></label>
+  <label>ชื่อเสียง (เว้นว่าง = ค่าเริ่มต้น) OpenAI เช่น marin, cedar | Azure เช่น th-TH-PremwadeeNeural, th-TH-NiwatNeural, th-TH-AcharaNeural
+    <input id="sTtsVoice" placeholder="th-TH-PremwadeeNeural" autocomplete="off" spellcheck="false"></label>
+  <button id="sTtsTest" type="button">บันทึกและทดสอบเสียง</button>
+  <div class="note" id="sTtsMsg" role="status"></div>
+  <div class="note" id="sKeys" role="status"></div>
   <label>ภาษาที่ฟัง
     <select id="sLang"><option value="th-TH">ไทย</option><option value="en-US">English</option><option value="ja-JP">日本語</option><option value="zh-CN">中文</option></select></label>
   <label id="sGhLbl">ลิงก์แหล่งข้อมูล (เว็บไซต์กฎหมาย คำพิพากษา หรือ GitHub ใส่ได้สูงสุด 5 ลิงก์)</label>
@@ -76,6 +107,9 @@
     <textarea id="sRef" placeholder="เช่น CREATE TABLE customers (id, name, phone, ...)"></textarea></label>
   <button id="sGen">ให้ AI ร่างฟิลด์จากฐานข้อมูลนี้</button>
   <div class="note" id="sGhMsg" role="status"></div>
+  <label>ตาราง Supabase ที่ให้ AI อ่านเพื่อตอบโต้ (เว้นว่าง = ไม่ให้อ่านอะไรเลย) จำกัดคอลัมน์ได้ เช่น cases(id,title,status), contacts(name,province)
+    <input id="sTables" placeholder="cases(id,title,status), contacts(name,province)" autocomplete="off" spellcheck="false"></label>
+  <div class="note" id="sDb" role="status"></div>
   <label>กรอบข้อมูลที่ให้ AI วิเคราะห์ (ชื่อฟิลด์ และสิ่งที่ต้องการให้ดึงออกมา)</label>
   <div id="sFields" style="display:grid;gap:.5rem"></div>
   <button id="sAdd">เพิ่มฟิลด์</button>
@@ -85,3 +119,14 @@
   <div class="note" id="sMsg" role="status"></div>
   <button id="sBack">กลับหน้าลูกบอล</button>
 </div></section>
+
+<div id="uModal" role="dialog" aria-modal="true" aria-labelledby="uTitle" hidden>
+  <div class="card">
+    <h2 id="uTitle">เข้าสู่ระบบเพื่อเปิดไมค์</h2>
+    <label>ชื่อผู้ใช้<input id="uu" autocomplete="username"></label>
+    <label>รหัสผ่าน<input id="up" type="password" autocomplete="current-password"></label>
+    <div class="err" id="uErr" role="alert"></div>
+    <button class="go" id="uGo">เข้าสู่ระบบ</button>
+    <button id="uCancel" type="button">ยกเลิก</button>
+  </div>
+</div>

@@ -1,13 +1,17 @@
 import { isAuthed } from "@/lib/auth";
 import { loadCfg, saveCfg } from "@/lib/config";
+import { secretStatus } from "@/lib/secrets";
 
 export const dynamic = "force-dynamic";
 
 // ทุกคนอ่านได้เฉพาะภาษากับชื่อฟิลด์ ส่วน Webhook, Authorization, ฐานข้อมูลอ้างอิง เห็นเฉพาะผู้ดูแล
 export async function GET() {
   const cfg = await loadCfg();
-  if (await isAuthed()) return Response.json({ config: cfg, admin: true });
-  return Response.json({ config: { lang: cfg.lang, fields: cfg.fields }, admin: false });
+  if (await isAuthed()) {
+    const keys = (await secretStatus()).keys;
+    return Response.json({ config: cfg, admin: true, keys });
+  }
+  return Response.json({ config: { lang: cfg.lang, fields: cfg.fields, tts: cfg.tts }, admin: false });
 }
 
 export async function PUT(req: Request) {
