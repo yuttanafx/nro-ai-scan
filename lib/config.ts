@@ -28,7 +28,7 @@ export function sanitize(c: Partial<Cfg>): Cfg {
     webhook: /^https?:\/\//.test(webhook) ? webhook : "",
     auth: str(c.auth, 500).trim(),
     lang: ["th-TH", "en-US", "ja-JP", "zh-CN"].includes(c.lang || "") ? (c.lang as string) : "th-TH",
-    ghUrl: str(c.ghUrl, 500).trim(),
+    ghUrl: str(c.ghUrl, 2000).trim(),
     ref: str(c.ref, 12000),
     fields: fields.length ? fields : DEFAULT.fields,
   };

@@ -64,13 +64,14 @@
 
 <section id="settings" aria-label="ตั้งค่า"><div class="card">
   <h2>ตั้งค่าการวิเคราะห์</h2>
-  <label>Webhook URL (ปลายทางที่รับผลสรุป)<input id="sWh" placeholder="https://your-app.vercel.app/api/analyze" inputmode="url"></label>
+  <label>Webhook URL (ปลายทางที่รับผลสรุป)<input id="sWh" placeholder="https://ปลายทางของคุณ/webhook (ห้ามใช้ /api/analyze ของเว็บนี้)" inputmode="url"></label>
   <label>ส่วนหัว Authorization (ไม่บังคับ)<input id="sAuth" placeholder="Bearer ..."></label>
   <label>ภาษาที่ฟัง
     <select id="sLang"><option value="th-TH">ไทย</option><option value="en-US">English</option><option value="ja-JP">日本語</option><option value="zh-CN">中文</option></select></label>
-  <label>ลิงก์ GitHub ของฐานข้อมูลหรือสคีมา (repo โฟลเดอร์ หรือไฟล์)
-    <input id="sGh" placeholder="https://github.com/ชื่อ/repo/blob/main/schema.sql" inputmode="url"></label>
-  <button id="sGhGo">ดึงจากลิงก์</button>
+  <label id="sGhLbl">ลิงก์แหล่งข้อมูล (เว็บไซต์กฎหมาย คำพิพากษา หรือ GitHub ใส่ได้สูงสุด 5 ลิงก์)</label>
+  <div id="sLinks" style="display:grid;gap:.5rem"></div>
+  <button id="sLinkAdd">+ เพิ่มลิงก์</button>
+  <button id="sGhGo">ดึงจากลิงก์และให้ AI ร่างฟิลด์</button>
   <label>เนื้อหาฐานข้อมูลที่ AI ใช้เป็นกรอบ (ดึงมาแล้วแก้ไขได้ หรือวางเองก็ได้)
     <textarea id="sRef" placeholder="เช่น CREATE TABLE customers (id, name, phone, ...)"></textarea></label>
   <button id="sGen">ให้ AI ร่างฟิลด์จากฐานข้อมูลนี้</button>

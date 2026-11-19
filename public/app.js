@@ -296,8 +296,22 @@
   fetch('/api/me').then(r=>r.json()).then(j=>{authed=!!j.ok;route();if(authed)loadCfg()}).catch(()=>{});
 
   // ---------- settings ----------
+  const MAXL=5; let links=[''];
+  function renderLinks(){
+    const box=$('sLinks'); box.innerHTML='';
+    links.forEach((v,i)=>{
+      const r=document.createElement('div'); r.className='lrow';
+      const inp=document.createElement('input'); inp.value=v; inp.inputMode='url'; inp.placeholder='https://...'; inp.setAttribute('aria-label','ลิงก์ที่ '+(i+1));
+      inp.oninput=()=>{links[i]=inp.value};
+      const x=document.createElement('button'); x.textContent='ลบ'; x.setAttribute('aria-label','ลบลิงก์ที่ '+(i+1));
+      x.onclick=()=>{links.splice(i,1); if(!links.length) links=['']; renderLinks()};
+      r.append(inp,x); box.append(r);
+    });
+    $('sLinkAdd').disabled=links.length>=MAXL;
+  }
+  $('sLinkAdd').onclick=()=>{ if(links.length<MAXL){links.push(''); renderLinks(); const ins=$('sLinks').querySelectorAll('input'); ins[ins.length-1].focus()} };
   function renderSettings(){
-    $('sWh').value=cfg.webhook; $('sAuth').value=cfg.auth; $('sLang').value=cfg.lang; $('sGh').value=cfg.ghUrl||''; $('sRef').value=cfg.ref||'';
+    $('sWh').value=cfg.webhook; $('sAuth').value=cfg.auth; $('sLang').value=cfg.lang; links=(cfg.ghUrl||'').split(/[\s,]+/).filter(Boolean); if(!links.length) links=['']; renderLinks(); $('sRef').value=cfg.ref||'';
     const box=$('sFields'); box.innerHTML='';
     cfg.fields.forEach((f,i)=>{
       const r=document.createElement('div'); r.className='frow';
@@ -311,7 +325,7 @@
   }
   $('sAdd').onclick=()=>{cfg.fields.push({key:'',desc:''});renderSettings()};
   function readCfg(){
-    cfg.webhook=$('sWh').value.trim(); cfg.auth=$('sAuth').value.trim(); cfg.lang=$('sLang').value; cfg.ghUrl=$('sGh').value.trim(); cfg.ref=$('sRef').value.slice(0,12000);
+    cfg.webhook=$('sWh').value.trim(); cfg.auth=$('sAuth').value.trim(); cfg.lang=$('sLang').value; cfg.ghUrl=links.map(x=>x.trim()).filter(Boolean).slice(0,MAXL).join('\n'); cfg.ref=$('sRef').value.slice(0,12000);
     cfg.fields=cfg.fields.map(f=>({key:f.key.trim().replace(/\s+/g,'_'),desc:f.desc.trim()})).filter(f=>f.key);
   }
   async function save(){
@@ -379,44 +393,48 @@
   };
 
   // ---------- GitHub reference ----------
-  [['sWh','webhook'],['sAuth','auth'],['sLang','lang'],['sGh','ghUrl'],['sRef','ref']].forEach(([id,k])=>$(id).addEventListener('input',()=>{cfg[k]=$(id).value}));
-  function parseGh(u){
-    let m;
-    if(/^https?:\/\/raw\.githubusercontent\.com\//.test(u)) return {raw:u};
-    if((m=u.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/#?]+)\/blob\/([^\/]+)\/(.+?)(?:[?#].*)?$/))) return {raw:'https://raw.githubusercontent.com/'+m[1]+'/'+m[2]+'/'+m[3]+'/'+m[4]};
-    if((m=u.match(/^https?:\/\/github\.com\/([^\/]+)\/([^\/#?]+?)(?:\.git)?(?:\/tree\/([^\/]+)(?:\/(.+?))?)?\/?(?:[?#].*)?$/))) return {o:m[1],r:m[2],b:m[3]||'',p:m[4]||''};
-    return null;
-  }
-  async function getText(url){const r=await fetch(url);if(!r.ok)throw new Error('HTTP '+r.status);return r.text()}
+  [['sWh','webhook'],['sAuth','auth'],['sLang','lang'],['sRef','ref']].forEach(([id,k])=>$(id).addEventListener('input',()=>{cfg[k]=$(id).value}));
+  function parseGh(u){return /(^|[\s,])https?:\/\//.test(u)}
   async function loadGh(u){
-    const g=parseGh(u); if(!g) throw new Error('bad');
-    if(g.raw) return '### '+g.raw.split('/').pop()+'\n'+(await getText(g.raw)).slice(0,12000);
-    const r=await fetch('https://api.github.com/repos/'+g.o+'/'+g.r+'/contents/'+g.p+(g.b?'?ref='+encodeURIComponent(g.b):''));
+    const r=await fetch('/api/github',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:u})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok) throw new Error(j.error||('HTTP '+r.status));
+    return j.text;
+  }
+  async function genFields(ref){
+    const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'fields',ref})});
     if(!r.ok) throw new Error('HTTP '+r.status);
-    let list=await r.json(); if(!Array.isArray(list)) list=[list];
-    const score=f=>(/schema|model|migrat|database|db|table|entity/i.test(f.name)?0:2)+(/\.(sql|prisma)$/i.test(f.name)?0:1);
-    const files=list.filter(f=>f.type==='file'&&f.download_url&&f.size<80000&&/\.(sql|prisma|json|ya?ml|md|csv|graphql)$/i.test(f.name)).sort((a,b)=>score(a)-score(b)).slice(0,5);
-    if(!files.length) throw new Error('nofiles');
-    let out='';
-    for(const f of files){ if(out.length>=12000) break; out+='### '+f.path+'\n'+(await getText(f.download_url)).slice(0,6000)+'\n\n'; }
-    return out.slice(0,12000);
+    const j=await r.json(); const arr=j.fields||[]; if(!arr.length) throw new Error('empty');
+    return arr;
   }
   $('sGhGo').onclick=async()=>{
-    const m=$('sGhMsg'), u=$('sGh').value.trim(); cfg.ghUrl=u;
-    if(!parseGh(u)){m.textContent='ลิงก์ไม่ถูกต้อง ใช้ลิงก์ github.com ของ repo โฟลเดอร์ หรือไฟล์';return}
-    m.textContent='กำลังดึงจาก GitHub…';
-    try{const t=await loadGh(u); $('sRef').value=t; cfg.ref=t; m.textContent='ดึงแล้ว '+t.length+' ตัวอักษร ตรวจดูแล้วกดบันทึก'}
-    catch(e){m.textContent=e.message==='nofiles'?'ไม่พบไฟล์สคีมาในลิงก์นี้ (รองรับ .sql .prisma .json .yml .md .csv) ชี้ไปที่ไฟล์โดยตรงได้':'ดึงจาก GitHub ไม่ได้ในหน้านี้ (หน้าตัวอย่างบนแชตบล็อกการเชื่อมต่อออกนอก หรือ repo เป็น private) วางเนื้อหาไฟล์ลงช่องด้านล่างแทนได้'}
+    const m=$('sGhMsg'); readCfg(); const u=cfg.ghUrl;
+    if(!parseGh(u)){m.textContent='ลิงก์ไม่ถูกต้อง ต้องขึ้นต้นด้วย https:// (ใส่ได้หลายลิงก์ คั่นด้วยบรรทัดใหม่)';return}
+    m.textContent='กำลังดึงเนื้อหาจากลิงก์…';
+    try{
+      const t=await loadGh(u); if(t.replace(/###[^\n]*\n/g,'').trim().length<200) throw new Error('thin'); $('sRef').value=t; cfg.ref=t;
+      m.textContent='ดึงแล้ว '+t.length+' ตัวอักษร กำลังให้ AI ร่างฟิลด์…';
+      readCfg(); cfg.fields=await genFields(t); renderSettings();
+      m.textContent='ดึงสคีมาและร่างฟิลด์ '+cfg.fields.length+' รายการแล้ว ตรวจและแก้ไข แล้วกดบันทึก';
+    }catch(e){
+      const c=e.message;
+      m.textContent=c==='nofiles'?'ไม่พบไฟล์สคีมาในลิงก์ GitHub นี้ (รองรับ .sql .prisma .json .yml .md .csv) ชี้ไปที่ไฟล์โดยตรงได้'
+        :c==='thin'?'ดึงได้แต่เนื้อหาน้อยมาก เว็บนี้อาจโหลดข้อมูลด้วย JavaScript หรือต้องค้นก่อน ลองลิงก์หน้าตัวบท/คำพิพากษาโดยตรง หรือคัดลอกเนื้อหามาวางในช่องด้านล่าง'
+        :c==='blocked'?'ลิงก์นี้ชี้ไปเครือข่ายภายใน ไม่อนุญาต'
+        :c==='unsupported'?'ลิงก์นี้เป็นไฟล์ (PDF/รูป/zip) ยังอ่านไม่ได้ ลองลิงก์หน้าเว็บแทน'
+        :c.startsWith('http_')?'เว็บปลายทางปฏิเสธการเข้าถึง ('+c.slice(5)+') ลองวางเนื้อหาเองในช่องด้านล่าง'
+        :c==='not_found'?'ไม่พบ repo หรือไฟล์นี้ ถ้าเป็น private ให้ตั้ง GITHUB_TOKEN ใน Environment Variables'
+        :c==='unauthorized'?'หมดเวลาล็อกอิน ล็อกอินใหม่อีกครั้ง'
+        :(c==='empty'||c.startsWith('HTTP'))?'ดึงสคีมาได้แล้ว แต่ร่างฟิลด์อัตโนมัติไม่สำเร็จ กดปุ่ม “ให้ AI ร่างฟิลด์” อีกครั้ง'
+        :'ดึงจาก GitHub ไม่ได้ วางเนื้อหาไฟล์ลงช่องด้านล่างแทนได้';
+    }
   };
   $('sGen').onclick=async()=>{
     const m=$('sGhMsg'), ref=$('sRef').value.trim();
     if(!ref){m.textContent='ยังไม่มีเนื้อหาฐานข้อมูล ดึงจากลิงก์หรือวางเองก่อน';return}
     m.textContent='AI กำลังอ่านฐานข้อมูลและร่างฟิลด์…';
     try{
-      const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mode:'fields',ref})});
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const j=await r.json(); const arr=j.fields||[]; if(!arr.length) throw new Error('empty');
-      cfg.fields=arr; renderSettings(); m.textContent='ร่างฟิลด์ '+arr.length+' รายการแล้ว ตรวจและแก้ไขก่อนกดบันทึก';
+      const arr=await genFields(ref); cfg.fields=arr; renderSettings(); m.textContent='ร่างฟิลด์ '+arr.length+' รายการแล้ว ตรวจและแก้ไขก่อนกดบันทึก';
     }catch(e){m.textContent='ร่างฟิลด์อัตโนมัติไม่ได้ ลองอีกครั้ง หรือเพิ่มฟิลด์เอง'}
   };
 
